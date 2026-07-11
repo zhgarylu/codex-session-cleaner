@@ -1,0 +1,21 @@
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.DS_Store
+.env
+.env.*
+
+coverage/
+.nyc_output/
+
+*.log
+
+# Local Codex data must never be committed.
+.codex/
+sessions/
+archived_sessions/
+session_compacted/
+session_backups/
