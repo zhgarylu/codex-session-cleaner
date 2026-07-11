@@ -1,67 +1,378 @@
 # Codex Session Cleaner
 
-Local-only visual inspector, archiver, and safe compactor for Codex session files.
+一个本地优先的 Codex Session 可视化检查、归档与安全瘦身工具。
 
-Codex sessions are stored as JSONL files under `$CODEX_HOME/sessions` (by default `~/.codex/sessions`). Long-running tasks can make individual session files grow to hundreds of MB or several GB. This project gives you a browser UI to understand where the space went, identify oversized sessions, archive old inactive sessions, and create compacted copies that remove large base64/tool-output blocks while preserving session metadata.
+Codex 的历史会话通常保存在 `$CODEX_HOME/sessions` 下，默认是 `~/.codex/sessions`。长期任务、包含大量工具输出的任务、图片/base64 内容、重复上下文等都可能让单个 `.jsonl` session 文件增长到几百 MB 甚至数 GB。这个工具提供一个本地浏览器界面，帮助你看清楚空间被哪些项目和哪些 session 占用，并在安全边界内进行归档、瘦身、备份与恢复。
 
-The tool is designed for safety first:
+核心原则：
 
-- Local only: the server binds to `127.0.0.1`.
-- No telemetry.
-- No automatic scan on page load.
-- No automatic cleanup.
-- Dangerous actions require explicit confirmation.
-- Active Codex session files are protected with `lsof` checks.
+- **本地运行**：服务只监听 `127.0.0.1`。
+- **无遥测**：不会上传 session 内容。
+- **不自动扫描**：打开页面后不会立即读取真实 session 文件。
+- **不自动清理**：所有归档、删除、替换、恢复都需要手动触发。
+- **危险操作二次确认**：执行前会展示数量、大小、路径和影响。
+- **保护活跃 session**：通过 `lsof` 检测仍被 Codex 打开的文件，拒绝覆盖或替换。
 
-## Contents
+## 目录
 
-- [Screenshots](#screenshots)
-- [Features](#features)
-- [Quick Start](#quick-start)
-- [How It Works](#how-it-works)
-- [Safety Model](#safety-model)
-- [Session Analysis](#session-analysis)
-- [Session Compaction](#session-compaction)
-- [Backup Records](#backup-records)
-- [Archiving](#archiving)
-- [CLI](#cli)
-- [Configuration](#configuration)
-- [Development](#development)
-- [Troubleshooting](#troubleshooting)
-- [FAQ](#faq)
+- [功能特性](#功能特性)
+- [快速开始](#快速开始)
+- [界面工作流](#界面工作流)
+- [安全模型](#安全模型)
+- [Session 分析](#session-分析)
+- [Session 瘦身](#session-瘦身)
+- [备份记录](#备份记录)
+- [归档与删除](#归档与删除)
+- [CLI 命令](#cli-命令)
+- [配置](#配置)
+- [项目结构](#项目结构)
+- [开发与测试](#开发与测试)
+- [故障排查](#故障排查)
+- [常见问题](#常见问题)
+- [English Summary](#english-summary)
 - [License](#license)
 
-## Screenshots
+## 功能特性
 
-Add screenshots before a public release:
+- **手动扫描**：页面启动后只显示欢迎页和安全说明，点击 `开始扫描 sessions` 后才读取 `$CODEX_HOME/sessions`。
+- **顶部总览**：展示 session 总大小、文件数量、可归档空间、可删除归档空间、需人工确认数量。
+- **按项目分组**：根据 session 元数据中的 `cwd` 分组，显示每个项目的 session 数量、总大小和路径是否仍存在。
+- **按月份分组**：展示不同月份的空间占用，便于定位异常增长。
+- **Session 明细表**：支持按项目、月份、状态和关键词搜索。
+- **大文件快速分析**：只读取文件头部、尾部和中间窗口，不把完整 JSONL 渲染到浏览器。
+- **深度分析**：用户手动触发后流式读取完整文件，适合需要全量统计的场景。
+- **安全瘦身**：先生成瘦身副本，再手动确认替换原文件。
+- **备份记录中心**：记录本机备份、外部盘备份路径、导入备份，并支持按记录恢复。
+- **占用检测**：显示仍持有 session 文件句柄的 Codex 进程、PID、FD 和读写模式。
+- **两阶段清理**：先归档压缩旧 session，超过更长保留期后才允许删除归档文件。
 
-- Welcome screen before manual scan
-- Workspace summary after scan
-- Session detail with `分析 / 瘦身 / 备份 / 占用` tabs
+## 快速开始
 
-## Features
+### 环境要求
 
-- Manual scan: opening the page does not read real session files until you click `开始扫描 sessions`.
-- Visual summary: total size, file count, archive candidates, expired archives, manual-review count.
-- Project view: group sessions by `cwd`, show project size, session count, and missing project paths.
-- Month view: show disk usage by month.
-- Session table: filter by project, month, status, and free-text search.
-- Large session analysis: sample head/middle/tail windows without rendering full JSONL.
-- Deep analysis: stream the full file only when manually triggered.
-- Safe compaction: generate a compacted copy before replacing the original file.
-- Backup records: list local backups, external disk paths, and imported backups.
-- Lock detection: show Codex processes that still hold a session file open.
-- Two-stage cleanup: archive first, delete compressed archives only after a longer retention period.
+- Node.js 20 或更高版本
+- macOS，或其他可使用 `lsof` 的系统
+- 本机存在 Codex session 目录：`$CODEX_HOME/sessions`
 
-## Quick Start
+### 启动本地可视化界面
 
-Requirements:
+```bash
+npm run dev
+```
 
-- Node.js 20 or newer
-- macOS or a system with `lsof`
-- Codex session files under `$CODEX_HOME/sessions`
+打开：
 
-Run the local UI:
+```text
+http://127.0.0.1:7345
+```
+
+页面打开后不会自动扫描。点击 `开始扫描 sessions` 后才会读取 `$CODEX_HOME/sessions`。
+
+### 命令行扫描
+
+```bash
+npm run scan
+```
+
+输出完整 session 明细：
+
+```bash
+node src/cli.js scan --full
+```
+
+### 运行测试
+
+```bash
+npm test
+```
+
+## 界面工作流
+
+1. 打开本地页面。
+2. 阅读欢迎页上的安全说明。
+3. 点击 `开始扫描 sessions`。
+4. 在总览中确认整体占用情况。
+5. 从项目列表或 Session 明细中定位大文件。
+6. 打开 Session 详情：
+   - `分析`：查看内容构成、疑似膨胀原因、大块内容信号。
+   - `瘦身`：预览可减少空间、生成瘦身副本、替换原文件。
+   - `备份`：查看备份记录、补录历史备份、登记外部盘备份、导入备份、按记录恢复。
+   - `占用`：检测是否仍有 Codex 进程打开该 session。
+7. 对清理候选执行归档或对大文件执行瘦身。
+
+## 安全模型
+
+工具遵守以下安全边界：
+
+- 不会在页面打开时自动扫描。
+- 默认扫描只读，不移动、不删除、不改写文件。
+- 原始 session 文件只处理 `$CODEX_HOME/sessions/**/*.jsonl`。
+- 不处理 `auth.json`、`config.toml`、SQLite 数据库、plugins、skills、cache、state 等 Codex 配置或状态文件。
+- 不覆盖当前仍被 Codex 打开的 session。
+- 不默认删除原始 session。
+- 删除只针对已经归档且超过保留期的压缩文件。
+- 恢复备份时，会先把当前文件移动到 `.before-restore-*`，再恢复备份。
+- 外部盘备份文件只登记或读取，不会被工具删除或移动。
+
+默认保留策略：
+
+- 原始 session 默认保留最近 90 天。
+- 已归档压缩文件默认 180 天后才允许删除。
+
+## Session 分析
+
+### 快速分析
+
+快速分析默认执行，只读取 session 文件的头部、尾部和若干中间窗口。即使遇到 5GB 级别的大文件，也不会把完整内容返回到浏览器。
+
+快速分析会统计：
+
+- JSONL 顶层 `type`
+- payload 类型
+- role 类型
+- `input_text` 信号
+- base64-like 数据
+- image-like 数据
+- tool/function call output 信号
+- token count 事件
+- 超长行
+- 时间线采样
+- 大块内容 Top N 短片段
+
+### 深度分析
+
+深度分析需要手动触发。它会流式读取完整 session 文件，并持续更新后台任务进度。
+
+深度分析仍然是只读操作，不修改任何 session 文件。
+
+## Session 瘦身
+
+瘦身用于处理包含超大字段的 session，例如：
+
+- 超大 `input_text`
+- 疑似 base64 或图片类文本
+- 超长 `encrypted_content`
+- 大块 command output / tool output
+- 无法安全解析的超长 JSONL 行
+
+推荐流程：
+
+1. 点击 `瘦身预览`：只读扫描，估算可减少大小。
+2. 点击 `生成瘦身副本`：写入 `$CODEX_HOME/session_compacted`，不改原文件。
+3. 确认 session 未被 Codex 打开。
+4. 点击 `替换原文件`：原文件先移动到 `$CODEX_HOME/session_backups`，瘦身副本再移动回原路径。
+5. 如有问题，可从 `备份` tab 按记录恢复原始文件。
+
+瘦身会保留：
+
+- `session_meta`
+- session id
+- timestamp
+- `cwd`
+- 顶层 type / role
+- 普通短文本
+- function call 元数据
+- token count 摘要
+
+被删除的大块内容会替换为占位摘要，例如：
+
+```text
+[removed large field: 1.2 GB, sha256=..., reason=base64-like, removed_at=...]
+```
+
+注意：瘦身后的 session 不再完整包含被移除的大块原文。如果之后可能需要原始内容，请保留备份。
+
+## 备份记录
+
+备份记录文件位于：
+
+```text
+$CODEX_HOME/session_backups/backup_records.jsonl
+```
+
+备份记录中心支持：
+
+- 扫描并补录历史本机备份。
+- 登记已经复制到 U 盘或外部数据盘的备份路径。
+- 从指定路径导入备份到 `$CODEX_HOME/session_backups/imported`。
+- 按某条备份记录恢复 session。
+
+每条备份记录包含：
+
+- 原始 session 路径
+- 本机备份路径或外部备份路径
+- session id
+- 标题
+- `cwd`
+- 文件大小
+- sha256
+- 创建时间
+- 来源
+- 文件是否仍可用
+
+外部备份文件不会被工具删除或移动。
+
+## 归档与删除
+
+归档和瘦身是两个独立功能。
+
+归档用于旧的、不活跃的 session。归档时原始 JSONL 会移动并 gzip 压缩到：
+
+```text
+$CODEX_HOME/archived_sessions
+```
+
+每次归档都会写入 manifest，记录：
+
+- 原路径
+- 归档路径
+- session id
+- 标题
+- `cwd`
+- 大小
+- sha256
+- 归档时间
+- 原始 mtime
+
+删除操作只针对超过保留期的压缩归档文件，不会直接删除仍在 `$CODEX_HOME/sessions` 下的原始 session。
+
+## CLI 命令
+
+生成摘要：
+
+```bash
+npm run scan
+```
+
+生成完整扫描输出：
+
+```bash
+node src/cli.js scan --full
+```
+
+从归档 manifest 恢复 session：
+
+```bash
+node src/cli.js restore --session-id <session-id>
+```
+
+## 配置
+
+默认 Codex Home：
+
+```text
+~/.codex
+```
+
+通过环境变量覆盖：
+
+```bash
+CODEX_HOME=/path/to/.codex npm run dev
+```
+
+默认服务地址：
+
+```text
+127.0.0.1:7345
+```
+
+修改端口：
+
+```bash
+PORT=7350 npm run dev
+```
+
+## 项目结构
+
+```text
+public/
+  index.html        浏览器界面骨架
+  styles.css        UI 设计系统与布局
+  app.js            前端状态和 API 调用
+src/
+  server.js         本地 HTTP 服务与 JSON API
+  sessionScanner.js 扫描与策略分类
+  sessionAnalyzer.js 快速/深度分析
+  sessionCompactor.js 瘦身副本、替换与恢复
+  sessionBackupRecords.js 备份记录中心
+  sessionLocks.js   lsof 占用检测与释放
+  archiveManager.js 归档与恢复
+  cli.js            CLI 入口
+test/
+  *.test.js         Node test runner 测试
+```
+
+## 开发与测试
+
+本项目故意不引入 Vite、React 或其他前端构建依赖，降低安装和审计成本。前端是原生 HTML/CSS/JavaScript，后端是原生 Node.js HTTP 服务。
+
+常用检查：
+
+```bash
+node --check public/app.js
+node --check src/server.js
+npm test
+```
+
+## 故障排查
+
+### 页面提示 session 仍被占用
+
+打开 Session 详情的 `占用` tab。工具会列出仍打开目标 session 文件的进程、PID、FD 和读写模式。只有当进程是 `codex` 且仍持有目标文件时，才允许发送 `TERM` 或 `KILL`。
+
+### 备份记录显示文件不可用
+
+如果是外部盘备份，请重新连接 U 盘或数据盘，然后刷新备份记录。如果是导入备份，请确认文件仍存在于 `$CODEX_HOME/session_backups/imported`。
+
+### 瘦身后看不到原来的大块内容
+
+这是预期行为。瘦身会把大块字段替换为占位摘要。需要完整原文时，请从备份记录恢复原始 JSONL。
+
+### 扫描较慢
+
+如果 session 目录很大，扫描需要 stat 文件、读取元数据、检测活跃句柄并做项目/月度分组。页面不会自动扫描，你可以在需要时手动触发。
+
+### GitHub 发布时 CLI 推送失败
+
+如果 `git push` 提示无法读取 GitHub 用户名，说明本机没有可用的 GitHub CLI 或凭据。可以使用 GitHub Desktop 推送，或在 Codex/ChatGPT 中授权 GitHub 插件并确保有 contents 写权限。
+
+## 常见问题
+
+### 打开页面会自动扫描我的 sessions 吗？
+
+不会。页面启动后处于未扫描状态，只有点击主按钮后才会开始扫描。
+
+### 工具会上传 session 内容吗？
+
+不会。服务绑定在 `127.0.0.1`，没有遥测逻辑。
+
+### 会破坏正在运行的 Codex 任务吗？
+
+危险操作会重新检测 active 文件句柄。如果目标 session 仍被 Codex 打开，服务端会拒绝替换或恢复。
+
+### 瘦身是否保留所有原始 token？
+
+不会。瘦身会保留结构和元数据，但会把被判定为超大的字段替换为占位摘要。如果你需要完整原文，请保留备份。
+
+### 这是 OpenAI 官方工具吗？
+
+不是。这是一个独立的本地工具，用于检查和管理本机 Codex session 文件。
+
+## English Summary
+
+Codex Session Cleaner is a local-only Node.js visual tool for inspecting, archiving, and safely compacting Codex session files under `$CODEX_HOME/sessions`.
+
+It is designed to be conservative:
+
+- Manual scan only
+- No telemetry
+- No automatic cleanup
+- Active session protection via `lsof`
+- Two-stage archive/delete flow
+- Compacted copies before replacement
+- Backup records for local, external, and imported backups
+
+Run:
 
 ```bash
 npm run dev
@@ -72,276 +383,6 @@ Open:
 ```text
 http://127.0.0.1:7345
 ```
-
-The page starts in a non-scanned state. Click `开始扫描 sessions` to scan `$CODEX_HOME/sessions`.
-
-Run a CLI scan:
-
-```bash
-npm run scan
-```
-
-Print full session details:
-
-```bash
-node src/cli.js scan --full
-```
-
-Run tests:
-
-```bash
-npm test
-```
-
-## How It Works
-
-The server is a small native Node.js HTTP service. The browser UI talks to local JSON APIs exposed by `src/server.js`.
-
-Main data sources:
-
-- `$CODEX_HOME/sessions/**/*.jsonl`: raw Codex session files.
-- `$CODEX_HOME/session_index.jsonl`: titles and recent session metadata when available.
-- `$CODEX_HOME/process_manager/chat_processes.json`: process metadata used as one protection signal.
-- `lsof`: active file-handle detection.
-
-The UI is intentionally read-first. Scanning builds an in-memory report. Cleanup actions run separate server-side validation before touching files.
-
-## Safety Model
-
-The tool follows these rules:
-
-- Never scan until you explicitly click the scan button.
-- Never process files outside `$CODEX_HOME/sessions` as original sessions.
-- Never modify `auth.json`, `config.toml`, SQLite files, plugins, skills, cache, or state files.
-- Never replace or restore over a session that is currently opened by Codex.
-- Never delete original session files by default.
-- Delete actions only apply to already archived compressed files that exceed the archive retention period.
-- Restore actions move the current file aside before restoring.
-- External backup files are never deleted or moved.
-
-Default retention:
-
-- Original sessions are protected for 90 days.
-- Archived compressed files are eligible for deletion after 180 days.
-
-## Session Analysis
-
-Session details support two analysis modes.
-
-### Quick Analysis
-
-Quick analysis is the default. It reads only small windows from the beginning, middle, and end of the file. This is suitable for very large session files because it avoids loading the full JSONL into memory or the browser.
-
-It reports:
-
-- JSONL `type` counts
-- payload type counts
-- role counts
-- likely `input_text` growth
-- base64-like data
-- image-like data
-- tool/function call output signals
-- token count events
-- oversized lines
-- timeline samples
-
-### Deep Analysis
-
-Deep analysis is manual. It streams the full file and updates a background job. Use it only when you need full-file statistics and can wait for a large file to be read.
-
-Deep analysis is still read-only.
-
-## Session Compaction
-
-Compaction is intended for oversized sessions that contain huge fields such as base64, image-like payloads, command output, or repeated context blocks.
-
-The flow is:
-
-1. `瘦身预览`: read the file and estimate removable size.
-2. `生成瘦身副本`: write a compacted JSONL copy under `$CODEX_HOME/session_compacted`.
-3. `替换原文件`: only after confirmation and active-file checks, move the original to `$CODEX_HOME/session_backups`, then move the compacted copy into the original path.
-4. `恢复备份`: restore from a backup record if needed.
-
-Compaction preserves:
-
-- `session_meta`
-- session id
-- timestamps
-- `cwd`
-- event type and role metadata
-- normal short text
-- function call metadata
-- token summaries
-
-Compaction replaces large risky fields with placeholders such as:
-
-```text
-[removed large field: 1.2 GB, sha256=..., reason=base64-like, removed_at=...]
-```
-
-Important: compacting does not preserve the full removed content in the compacted session file. Keep the backup if you may need the original content later.
-
-## Backup Records
-
-Backup records are stored in:
-
-```text
-$CODEX_HOME/session_backups/backup_records.jsonl
-```
-
-The UI can:
-
-- Reconcile historical local backups.
-- Register a backup file that you copied to a USB drive or external data disk.
-- Import a backup from a specified path into `$CODEX_HOME/session_backups/imported`.
-- Restore a session from a specific backup record.
-
-Backup record fields include:
-
-- original path
-- backup path or external path
-- session id
-- title
-- `cwd`
-- size
-- sha256
-- creation time
-- source
-- availability status
-
-External backup files are never deleted by the tool.
-
-## Archiving
-
-Archiving is separate from compaction.
-
-Archive candidates are old inactive sessions that do not show protection signals. When archived, the original JSONL is moved and gzip-compressed under:
-
-```text
-$CODEX_HOME/archived_sessions
-```
-
-Each archive operation writes a manifest entry containing the original path, archive path, session id, title, `cwd`, size, sha256, archive time, and original mtime.
-
-Expired archive deletion only applies to compressed archive files, not original live session files.
-
-## CLI
-
-Generate a summary:
-
-```bash
-npm run scan
-```
-
-Generate full scan output:
-
-```bash
-node src/cli.js scan --full
-```
-
-Restore archived sessions from the archive manifest:
-
-```bash
-node src/cli.js restore --session-id <session-id>
-```
-
-## Configuration
-
-The default Codex home is:
-
-```text
-~/.codex
-```
-
-You can override it with:
-
-```bash
-CODEX_HOME=/path/to/.codex npm run dev
-```
-
-The server listens on:
-
-```text
-127.0.0.1:7345
-```
-
-Override the port:
-
-```bash
-PORT=7350 npm run dev
-```
-
-## Development
-
-Project layout:
-
-```text
-public/
-  index.html        Browser UI shell
-  styles.css        UI design system and layout
-  app.js            Frontend state and API calls
-src/
-  server.js         Local HTTP server and JSON APIs
-  sessionScanner.js Scan and classification logic
-  sessionAnalyzer.js Quick/deep session analysis
-  sessionCompactor.js Safe compact-copy and replace flow
-  sessionBackupRecords.js Backup record registry
-  sessionLocks.js   lsof lock detection and release
-  archiveManager.js Archive and restore logic
-  cli.js            CLI entrypoint
-test/
-  *.test.js         Node test runner tests
-```
-
-Validation:
-
-```bash
-node --check public/app.js
-node --check src/server.js
-npm test
-```
-
-The project intentionally avoids build tooling and frontend dependencies. The UI is plain HTML, CSS, and browser JavaScript.
-
-## Troubleshooting
-
-### The page says a session is still active
-
-Open the session detail and use the `占用` tab. It shows processes that still hold the session file open. The tool can send `TERM` or `KILL` only to a `codex` process that still has the exact target session file open.
-
-### A backup record says the file is unavailable
-
-For external backups, reconnect the USB drive or data disk and refresh backup records. For imported backups, confirm the file still exists under `$CODEX_HOME/session_backups/imported`.
-
-### The compacted session is missing old large content
-
-That is expected. Compaction replaces large fields with placeholders. Use the backup record to restore the original full JSONL if required.
-
-### The scan is slow
-
-Very large session trees can take time because the tool stats JSONL files, reads metadata, checks active handles, and groups results by project/month. The UI does not start this scan automatically.
-
-## FAQ
-
-### Does opening the page scan my sessions?
-
-No. The page starts in a manual state. Scan only starts after you click the primary scan button.
-
-### Does the tool upload anything?
-
-No. It is a local HTTP server bound to `127.0.0.1`.
-
-### Can this break an active Codex session?
-
-Dangerous operations re-check active file handles with `lsof`. Active sessions are refused rather than force-edited.
-
-### Does compacting preserve every original token?
-
-No. Compacting preserves structure and metadata but replaces selected large fields with placeholders. Keep the backup if you need the exact original content.
-
-### Is this an official OpenAI tool?
-
-No. This is an independent local utility for inspecting and managing local Codex session files.
 
 ## License
 
