@@ -1,0 +1,23 @@
+{
+  "name": "codex-session-cleaner",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "Local-only visual inspector, archiver, and safe compactor for Codex session files.",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "session",
+    "cleanup",
+    "jsonl",
+    "local-first"
+  ],
+  "scripts": {
+    "dev": "node src/server.js",
+    "scan": "node src/cli.js scan",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
