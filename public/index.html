@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Codex Session Cleaner</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-block">
+        <div class="brand-mark">CS</div>
+        <div>
+          <h1>Codex Session Cleaner</h1>
+          <p id="subtitle">Local-only visual cleaner for <code>$CODEX_HOME/sessions</code>.</p>
+        </div>
+      </div>
+      <nav class="top-actions" aria-label="Primary actions">
+        <a class="nav-link" href="#docs">Docs</a>
+        <a class="nav-link" href="#github">GitHub</a>
+        <a class="nav-link" href="/?demo=1">Demo</a>
+        <button id="refreshBtn" class="primary">开始扫描</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="welcomePanel" class="welcome-panel">
+        <div class="welcome-copy">
+          <div class="eyebrow">Local only · No telemetry · No auto cleanup</div>
+          <h2>先看清楚，再决定是否归档或瘦身。</h2>
+          <p>这个工具只在本机读取 Codex session 元数据，默认不会移动、删除或改写任何文件。扫描需要你手动触发，清理操作会再次确认并重新检测活跃 session。</p>
+          <div class="welcome-actions">
+            <button id="welcomeScanBtn" class="primary large">开始扫描 sessions</button>
+            <span id="scanState" class="scan-state">等待手动扫描</span>
+          </div>
+        </div>
+        <div class="trust-card">
+          <div class="trust-row">
+            <span>扫描目录</span>
+            <strong><code>$CODEX_HOME/sessions</code></strong>
+          </div>
+          <div class="trust-row">
+            <span>默认行为</span>
+            <strong>只读预览</strong>
+          </div>
+          <div class="trust-row">
+            <span>危险操作</span>
+            <strong>二次确认</strong>
+          </div>
+          <div class="trust-row">
+            <span>活跃文件</span>
+            <strong>自动保护</strong>
+          </div>
+        </div>
+      </section>
+
+      <section id="workspace" class="workspace" hidden>
+        <section class="summary-grid" id="summaryGrid" aria-label="Scan summary">
+          <div class="metric"><span>Sessions 总大小</span><strong>-</strong></div>
+          <div class="metric"><span>文件数量</span><strong>-</strong></div>
+          <div class="metric"><span>可归档空间</span><strong>-</strong></div>
+          <div class="metric"><span>可删除归档</span><strong>-</strong></div>
+          <div class="metric"><span>需人工确认</span><strong>-</strong></div>
+        </section>
+
+        <section class="toolbar" aria-label="Filters">
+          <label>
+            项目
+            <select id="projectFilter"><option value="">全部项目</option></select>
+          </label>
+          <label>
+            月份
+            <select id="monthFilter"><option value="">全部月份</option></select>
+          </label>
+          <label>
+            状态
+            <select id="statusFilter">
+              <option value="">全部状态</option>
+              <option value="protect">保护</option>
+              <option value="archive_candidate">可归档</option>
+              <option value="manual_review">需人工确认</option>
+            </select>
+          </label>
+          <label>
+            搜索
+            <input id="searchInput" type="search" placeholder="标题 / session id / 路径">
+          </label>
+        </section>
+
+        <section class="cleanup-actions" aria-label="Cleanup actions">
+          <div>
+            <div class="panel-title">清理操作</div>
+            <p class="muted">归档和删除都会在服务端重新校验候选状态；不会忽略 active 保护。</p>
+          </div>
+          <div class="cleanup-buttons">
+            <button id="archiveVisibleBtn" class="danger">归档当前筛选候选</button>
+            <button id="deleteArchivesBtn" class="danger">删除超期归档</button>
+          </div>
+        </section>
+
+        <section class="panels">
+          <div class="panel">
+            <div class="panel-title">按月占用</div>
+            <div id="monthBars" class="bars"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">按项目占用</div>
+            <div id="projectList" class="project-list"></div>
+          </div>
+        </section>
+
+        <section class="detail-grid">
+          <div class="panel detail-panel">
+            <div class="panel-title">项目详情</div>
+            <div id="projectDetail" class="empty-state">选择一个项目查看该项目下最大的 session。</div>
+          </div>
+          <div class="panel detail-panel">
+            <div class="panel-title">Session 详情</div>
+            <div id="sessionDetail" class="empty-state">选择一个 session 后查看内容分析、瘦身、备份和占用状态。</div>
+          </div>
+        </section>
+
+        <section class="table-wrap">
+          <div class="table-header">
+            <h2>Session 明细</h2>
+            <span id="rowCount">-</span>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>状态</th>
+                  <th>标题 / Session</th>
+                  <th>项目</th>
+                  <th>日期</th>
+                  <th class="number-cell">大小</th>
+                  <th>原因</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="sessionRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
