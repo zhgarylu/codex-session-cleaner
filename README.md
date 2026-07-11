@@ -17,6 +17,7 @@ Codex 的历史会话通常保存在 `$CODEX_HOME/sessions` 下，默认是 `~/.
 
 - [功能特性](#功能特性)
 - [快速开始](#快速开始)
+- [Demo 演示](#demo-演示)
 - [界面工作流](#界面工作流)
 - [安全模型](#安全模型)
 - [Session 分析](#session-分析)
@@ -85,6 +86,32 @@ node src/cli.js scan --full
 ```bash
 npm test
 ```
+
+## Demo 演示
+
+项目内置安全演示模式：
+
+```text
+http://127.0.0.1:7345/?demo=1
+```
+
+Demo 模式只使用前端 mock 数据，不会读取 `$CODEX_HOME`，也不会调用真实清理 API。它适合用于截图、录屏、GitHub Pages 或向其他人展示界面流程。
+
+仓库里也提供了一个可直接预览的静态 demo 页面：
+
+```text
+https://github.com/zhgarylu/codex-session-cleaner/blob/main/demo/index.html
+```
+
+Demo 中可以体验：
+
+- 手动扫描后的工作台总览。
+- 按项目和月份查看占用。
+- 查看一个模拟的 5GB `movie.aigc` 大 session。
+- Session 详情中的 `分析 / 瘦身 / 备份 / 占用` tabs。
+- 瘦身预览、生成副本、备份记录、占用检测的交互流程。
+
+Demo 模式下，归档、删除、替换、恢复、释放进程等危险操作都只显示模拟结果，不会修改任何本机文件。
 
 ## 界面工作流
 
